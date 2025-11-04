@@ -294,9 +294,7 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
         const link = `${window.location.href.split('#')[0]}#${newSessionId}`;
         setSessionLink(link);
         
-        signalingService.send({ type: 'create', sessionId: newSessionId });
-        
-        // Set up message handler for signaling
+        // Set up message handler BEFORE sending create message
         signalingService.onMessage(async (data) => {
             console.log('Received signaling message:', data.type);
             if (data.type === 'peer-joined' && data.sessionId === sessionIdRef.current) {
@@ -320,6 +318,10 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
                 handleSignalingMessage(data);
             }
         });
+        
+        // Now send the create message after handler is set up
+        await signalingService.send({ type: 'create', sessionId: newSessionId });
+        console.log('Sent create message for session:', newSessionId);
         
         setSessionStatus('waitingForPeer');
 
