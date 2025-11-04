@@ -1,0 +1,3 @@
+# This file tells GitHub that Render should auto-deploy
+# Render will automatically deploy when you push code
+# No action needed - just push to GitHub!

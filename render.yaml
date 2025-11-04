@@ -1,0 +1,25 @@
+services:
+  # WebRTC Signaling Server
+  - type: web
+    name: volley-signaling-server
+    env: node
+    plan: free
+    buildCommand: cd server && npm install
+    startCommand: cd server && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000  # Render uses port 10000 by default, but we read from env
+
+  # Frontend (Static Site)
+  - type: web
+    name: volley-frontend
+    env: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false  # Set this manually in Render dashboard
+      - key: VITE_SIGNALING_SERVER_URL
+        value: wss://volley-signaling-server.onrender.com  # Will be updated after first deployment

@@ -1,0 +1,9 @@
+
+{
+  "name": "Volley - AI Peer Accountability",
+  "description": "An AI-powered peer-to-peer coaching platform with real-time session intelligence and automated reporting.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera"
+  ]
+}
