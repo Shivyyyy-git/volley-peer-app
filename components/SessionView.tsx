@@ -166,7 +166,21 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
     };
 
     pcRef.current.ontrack = (event) => {
+        console.log('Received remote track, setting remote stream');
         setRemoteStream(event.streams[0]);
+        if (sessionStatus !== 'connected') {
+          setSessionStatus('connected');
+        }
+    };
+    
+    pcRef.current.onconnectionstatechange = () => {
+      console.log('Peer connection state:', pcRef.current?.connectionState);
+      if (pcRef.current?.connectionState === 'connected') {
+        setSessionStatus('connected');
+      } else if (pcRef.current?.connectionState === 'failed') {
+        setError('Connection failed. Please try again.');
+        setSessionStatus('error');
+      }
     };
 
     stream.getTracks().forEach(track => {
@@ -220,30 +234,49 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
   }, [riskAlert]);
 
   const handleSignalingMessage = useCallback(async (data: any) => {
-    if (!pcRef.current || !localStream) return;
+    if (!pcRef.current || !localStream) {
+      console.warn('Cannot handle signaling message: peer connection or local stream not ready', { hasPC: !!pcRef.current, hasStream: !!localStream });
+      return;
+    }
+
+    console.log('Handling signaling message:', data.type);
 
     switch (data.type) {
         case 'offer':
-            await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.offer));
-            const answer = await pcRef.current.createAnswer();
-            await pcRef.current.setLocalDescription(answer);
-            signalingService.send({ type: 'answer', answer, sessionId: sessionIdRef.current });
-            setSessionStatus('connected');
+            try {
+              await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.offer));
+              const answer = await pcRef.current.createAnswer();
+              await pcRef.current.setLocalDescription(answer);
+              signalingService.send({ type: 'answer', answer, sessionId: sessionIdRef.current });
+              console.log('Sent answer, setting status to connected');
+              setSessionStatus('connected');
+            } catch (e) {
+              console.error('Error handling offer:', e);
+              setError('Failed to establish connection');
+            }
             break;
         case 'answer':
-            await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
-            setSessionStatus('connected');
+            try {
+              await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+              console.log('Received answer, setting status to connected');
+              setSessionStatus('connected');
+            } catch (e) {
+              console.error('Error handling answer:', e);
+              setError('Failed to establish connection');
+            }
             break;
         case 'candidate':
             if (data.candidate) {
                 try {
                     await pcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+                    console.log('Added ICE candidate');
                 } catch (e) {
                     console.error('Error adding received ice candidate', e);
                 }
             }
             break;
         default:
+            console.log('Unknown signaling message type:', data.type);
             break;
     }
   }, [localStream]);
@@ -264,14 +297,24 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
         
         signalingService.send({ type: 'create', sessionId: newSessionId });
         
+        // Set up message handler for signaling
         signalingService.onMessage(async (data) => {
+            console.log('Received signaling message:', data.type);
             if (data.type === 'peer-joined' && data.sessionId === sessionIdRef.current) {
                 console.log("Peer joined, creating offer...");
                 setupPeerConnection(stream);
+                // Wait a bit for peer connection to be ready
+                await new Promise(resolve => setTimeout(resolve, 100));
                 if (pcRef.current) {
-                    const offer = await pcRef.current.createOffer();
-                    await pcRef.current.setLocalDescription(offer);
-                    signalingService.send({ type: 'offer', offer, sessionId: sessionIdRef.current });
+                    try {
+                      const offer = await pcRef.current.createOffer();
+                      await pcRef.current.setLocalDescription(offer);
+                      signalingService.send({ type: 'offer', offer, sessionId: sessionIdRef.current });
+                      console.log('Sent offer to peer');
+                    } catch (e) {
+                      console.error('Error creating offer:', e);
+                      setError('Failed to create connection offer');
+                    }
                 }
                 startAILiveSession(stream);
             } else {
@@ -299,9 +342,15 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
         sessionIdRef.current = sessionId;
         await signalingService.connect();
         setupPeerConnection(stream);
-
+        
+        // Set up message handler before sending join
         signalingService.onMessage(handleSignalingMessage);
+        
+        // Wait a bit for peer connection to be ready
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         signalingService.send({ type: 'join', sessionId });
+        console.log('Sent join message for session:', sessionId);
 
     } catch (err) {
         console.error("Error joining session.", err);
