@@ -233,16 +233,8 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
   }, [riskAlert]);
 
   const handleSignalingMessage = useCallback(async (data: any) => {
-    // Wait a bit if peer connection isn't ready yet (for join flow)
-    let retries = 0;
-    while ((!pcRef.current || !localStream) && retries < 10) {
-      console.log('Waiting for peer connection to be ready...', { hasPC: !!pcRef.current, hasStream: !!localStream, retry: retries });
-      await new Promise(resolve => setTimeout(resolve, 100));
-      retries++;
-    }
-    
     if (!pcRef.current || !localStream) {
-      console.error('Cannot handle signaling message: peer connection or local stream not ready after retries', { hasPC: !!pcRef.current, hasStream: !!localStream });
+      console.warn('Cannot handle signaling message: peer connection or local stream not ready', { hasPC: !!pcRef.current, hasStream: !!localStream });
       return;
     }
 
@@ -343,6 +335,7 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
   const joinSession = useCallback(async (sessionId: string) => {
     setSessionStatus('joining');
     setError(null);
+    setPendingSessionId(null);
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         setLocalStream(stream);
@@ -354,20 +347,27 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
         // Set up peer connection first
         setupPeerConnection(stream);
         
-        // Wait a bit for peer connection to be fully initialized
+        // Wait for peer connection to be ready
         await new Promise(resolve => setTimeout(resolve, 200));
         
-        // Verify peer connection is ready
         if (!pcRef.current) {
           throw new Error('Peer connection failed to initialize');
         }
         
-        // Set up message handler AFTER peer connection is ready
-        signalingService.onMessage(handleSignalingMessage);
+        // Set up message handler BEFORE sending join
+        // Peer B should only handle: offer, answer, candidate - NOT peer-joined
+        signalingService.onMessage(async (data) => {
+          console.log('Peer B received signaling message:', data.type);
+          // Peer B should NOT handle peer-joined, only offer/answer/candidate
+          if (data.type === 'peer-joined') {
+            console.log('Peer B ignoring peer-joined message (that\'s for Peer A)');
+            return;
+          }
+          await handleSignalingMessage(data);
+        });
         
-        // Now send join message
-        await signalingService.send({ type: 'join', sessionId });
-        console.log('Sent join message for session:', sessionId);
+        signalingService.send({ type: 'join', sessionId });
+        console.log('Peer B sent join message for session:', sessionId);
 
     } catch (err) {
         console.error("Error joining session.", err);
@@ -376,11 +376,16 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
     }
   }, [setupPeerConnection, handleSignalingMessage]);
 
+  const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
+
   useEffect(() => {
     const handleHashChange = () => {
         const sessionId = window.location.hash.substring(1);
         if (sessionId && sessionStatus === 'idle') {
-            joinSession(sessionId);
+            // Don't auto-join, just show the join button
+            setPendingSessionId(sessionId);
+        } else if (!sessionId) {
+            setPendingSessionId(null);
         }
     };
     handleHashChange(); // Check on initial load
@@ -388,7 +393,7 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
     return () => {
         window.removeEventListener('hashchange', handleHashChange);
     };
-  }, [joinSession, sessionStatus]);
+  }, [sessionStatus]);
   
   const nextPrompt = useCallback(() => {
     if(currentPromptIndex < prompts.length - 1) {
@@ -405,6 +410,22 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
   };
 
   const renderContent = () => {
+      // Show join button if there's a pending session ID
+      if (pendingSessionId && sessionStatus === 'idle') {
+          return (
+             <div className="text-center p-6 bg-brand-gray-800 rounded-lg">
+                <h2 className="text-xl font-semibold text-white">Join Peer Session</h2>
+                <p className="text-brand-gray-400 mt-2 mb-6">You've been invited to join a peer accountability session.</p>
+                <button
+                    onClick={() => joinSession(pendingSessionId)}
+                    className="bg-brand-primary text-white font-semibold px-8 py-4 rounded-full hover:bg-indigo-500 transition-colors text-lg"
+                >
+                    Join Call
+                </button>
+            </div>
+          );
+      }
+      
       if (sessionStatus === 'waitingForPeer') {
           return (
              <div className="text-center p-6 bg-brand-gray-800 rounded-lg">
@@ -415,6 +436,14 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
                     <button onClick={copyLink} className="bg-brand-primary text-white font-semibold px-4 py-2 rounded-md hover:bg-indigo-500">Copy</button>
                 </div>
                  <p className="text-brand-gray-400 mt-6 animate-pulse">Waiting for your peer to join...</p>
+            </div>
+          );
+      }
+      if (sessionStatus === 'joining') {
+          return (
+             <div className="text-center p-6 bg-brand-gray-800 rounded-lg">
+                <h2 className="text-xl font-semibold text-white">Joining session...</h2>
+                <p className="text-brand-gray-400 mt-2 animate-pulse">Please wait while we connect you.</p>
             </div>
           );
       }
