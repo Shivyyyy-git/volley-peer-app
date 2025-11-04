@@ -339,57 +339,92 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
     setError(null);
     setPendingSessionId(null);
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        setLocalStream(stream);
-        setIsPeerA(false);
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      setLocalStream(stream);
+      setIsPeerA(false);
+      
+      sessionIdRef.current = sessionId;
+      await signalingService.connect();
+      
+      // Set up peer connection first
+      setupPeerConnection(stream);
+      
+      // Wait for peer connection to be ready
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      if (!pcRef.current) {
+        throw new Error('Peer connection failed to initialize');
+      }
+      
+      // Create a message handler that uses the stream directly (not from closure)
+      signalingService.onMessage(async (data) => {
+        console.log('Peer B received signaling message:', data.type);
         
-        sessionIdRef.current = sessionId;
-        await signalingService.connect();
-        
-        // Set up peer connection first
-        setupPeerConnection(stream);
-        
-        // Wait for peer connection to be ready
-        await new Promise(resolve => setTimeout(resolve, 200));
-        
-        if (!pcRef.current) {
-          throw new Error('Peer connection failed to initialize');
+        if (data.type === 'peer-joined') {
+          console.log('Peer B ignoring peer-joined message (that\'s for Peer A)');
+          return;
         }
         
-        // Set up message handler BEFORE sending join
-        // Peer B should only handle: offer, answer, candidate - NOT peer-joined
-        signalingService.onMessage(async (data) => {
-          console.log('Peer B received signaling message:', data.type, 'Has PC:', !!pcRef.current, 'Has Stream:', !!localStream);
-          // Peer B should NOT handle peer-joined, only offer/answer/candidate
-          if (data.type === 'peer-joined') {
-            console.log('Peer B ignoring peer-joined message (that\'s for Peer A)');
+        // Wait for peer connection to be ready if needed
+        if (!pcRef.current) {
+          console.warn('Peer B: PC not ready, waiting...');
+          let retries = 0;
+          while (!pcRef.current && retries < 20) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            retries++;
+          }
+          if (!pcRef.current) {
+            console.error('Peer B: Still not ready after waiting');
+            setError('Peer connection failed to initialize');
+            setSessionStatus('error');
             return;
           }
-          // Wait a bit if not ready yet
-          if (!pcRef.current || !localStream) {
-            console.warn('Peer B: PC or stream not ready, waiting...');
-            let retries = 0;
-            while ((!pcRef.current || !localStream) && retries < 10) {
-              await new Promise(resolve => setTimeout(resolve, 100));
-              retries++;
-            }
-            if (!pcRef.current || !localStream) {
-              console.error('Peer B: Still not ready after waiting');
-              return;
-            }
-          }
-          await handleSignalingMessage(data);
-        });
+        }
         
-        signalingService.send({ type: 'join', sessionId });
-        console.log('Peer B sent join message for session:', sessionId);
+        // Handle offer directly (don't rely on handleSignalingMessage closure)
+        if (data.type === 'offer') {
+          try {
+            console.log('Peer B handling offer...');
+            await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.offer));
+            const answer = await pcRef.current.createAnswer();
+            await pcRef.current.setLocalDescription(answer);
+            signalingService.send({ type: 'answer', answer, sessionId: sessionIdRef.current });
+            console.log('✅ Peer B sent answer, setting status to connected');
+            setSessionStatus('connected');
+          } catch (e) {
+            console.error('Error handling offer:', e);
+            setError('Failed to establish connection');
+            setSessionStatus('error');
+          }
+        } else if (data.type === 'answer') {
+          // Shouldn't happen for Peer B, but handle it
+          try {
+            await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+            console.log('Peer B received answer (unexpected)');
+            setSessionStatus('connected');
+          } catch (e) {
+            console.error('Error handling answer:', e);
+          }
+        } else if (data.type === 'candidate' && data.candidate) {
+          try {
+            await pcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+            console.log('Peer B added ICE candidate');
+          } catch (e) {
+            console.error('Error adding ICE candidate:', e);
+          }
+        }
+      });
+      
+      // Now send join message
+      await signalingService.send({ type: 'join', sessionId });
+      console.log('Peer B sent join message for session:', sessionId);
 
     } catch (err) {
-        console.error("Error joining session.", err);
-        setError("Could not access camera/microphone or join the session.");
-        setSessionStatus('error');
+      console.error("Error joining session.", err);
+      setError("Could not access camera/microphone or join the session.");
+      setSessionStatus('error');
     }
-  }, [setupPeerConnection, handleSignalingMessage]);
+  }, [setupPeerConnection]);
 
   const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
 
