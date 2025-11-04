@@ -168,16 +168,15 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
     pcRef.current.ontrack = (event) => {
         console.log('Received remote track, setting remote stream');
         setRemoteStream(event.streams[0]);
-        if (sessionStatus !== 'connected') {
-          setSessionStatus('connected');
-        }
+        setSessionStatus('connected');
     };
     
     pcRef.current.onconnectionstatechange = () => {
-      console.log('Peer connection state:', pcRef.current?.connectionState);
-      if (pcRef.current?.connectionState === 'connected') {
+      const state = pcRef.current?.connectionState;
+      console.log('Peer connection state:', state);
+      if (state === 'connected') {
         setSessionStatus('connected');
-      } else if (pcRef.current?.connectionState === 'failed') {
+      } else if (state === 'failed' || state === 'disconnected') {
         setError('Connection failed. Please try again.');
         setSessionStatus('error');
       }
