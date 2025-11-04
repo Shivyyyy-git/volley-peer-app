@@ -272,6 +272,140 @@ const ReportView: React.FC<ReportViewProps> = ({ transcript, gamificationData, o
                     </div>
                 </div>
             </ReportCard>
+            <ReportCard title="Sentiment Analysis" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>}>
+                <p className="mb-4 text-brand-gray-300"><strong>Overall:</strong> {report.sentimentAnalysis?.overall || report.moodAnalysis}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-3">
+                        <h4 className="font-semibold text-brand-light">Peer A</h4>
+                        <div className="flex items-center gap-2 mb-2">
+                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                report.sentimentAnalysis?.peerA?.sentiment === 'positive' ? 'bg-green-500/20 text-green-400' :
+                                report.sentimentAnalysis?.peerA?.sentiment === 'negative' ? 'bg-red-500/20 text-red-400' :
+                                'bg-gray-500/20 text-gray-400'
+                            }`}>
+                                {report.sentimentAnalysis?.peerA?.sentiment || 'neutral'}
+                            </span>
+                            <span className="text-sm text-brand-gray-400">{report.sentimentAnalysis?.peerA?.emotionalState || 'N/A'}</span>
+                        </div>
+                        {report.sentimentAnalysis?.peerA?.whatWentWell && report.sentimentAnalysis.peerA.whatWentWell.length > 0 && (
+                            <div>
+                                <p className="text-sm font-semibold text-green-400 mb-1">✓ What Went Well:</p>
+                                <ul className="list-disc pl-5 space-y-1 text-sm">
+                                    {report.sentimentAnalysis.peerA.whatWentWell.map((item, i) => <li key={i}>{item}</li>)}
+                                </ul>
+                            </div>
+                        )}
+                        {report.sentimentAnalysis?.peerA?.whatWentWrong && report.sentimentAnalysis.peerA.whatWentWrong.length > 0 && (
+                            <div>
+                                <p className="text-sm font-semibold text-orange-400 mb-1">⚠ Areas for Improvement:</p>
+                                <ul className="list-disc pl-5 space-y-1 text-sm">
+                                    {report.sentimentAnalysis.peerA.whatWentWrong.map((item, i) => <li key={i}>{item}</li>)}
+                                </ul>
+                            </div>
+                        )}
+                    </div>
+                    <div className="space-y-3">
+                        <h4 className="font-semibold text-brand-light">Peer B</h4>
+                        <div className="flex items-center gap-2 mb-2">
+                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                report.sentimentAnalysis?.peerB?.sentiment === 'positive' ? 'bg-green-500/20 text-green-400' :
+                                report.sentimentAnalysis?.peerB?.sentiment === 'negative' ? 'bg-red-500/20 text-red-400' :
+                                'bg-gray-500/20 text-gray-400'
+                            }`}>
+                                {report.sentimentAnalysis?.peerB?.sentiment || 'neutral'}
+                            </span>
+                            <span className="text-sm text-brand-gray-400">{report.sentimentAnalysis?.peerB?.emotionalState || 'N/A'}</span>
+                        </div>
+                        {report.sentimentAnalysis?.peerB?.whatWentWell && report.sentimentAnalysis.peerB.whatWentWell.length > 0 && (
+                            <div>
+                                <p className="text-sm font-semibold text-green-400 mb-1">✓ What Went Well:</p>
+                                <ul className="list-disc pl-5 space-y-1 text-sm">
+                                    {report.sentimentAnalysis.peerB.whatWentWell.map((item, i) => <li key={i}>{item}</li>)}
+                                </ul>
+                            </div>
+                        )}
+                        {report.sentimentAnalysis?.peerB?.whatWentWrong && report.sentimentAnalysis.peerB.whatWentWrong.length > 0 && (
+                            <div>
+                                <p className="text-sm font-semibold text-orange-400 mb-1">⚠ Areas for Improvement:</p>
+                                <ul className="list-disc pl-5 space-y-1 text-sm">
+                                    {report.sentimentAnalysis.peerB.whatWentWrong.map((item, i) => <li key={i}>{item}</li>)}
+                                </ul>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </ReportCard>
+                         {report.riskWords && (report.riskWords.detected === true || report.riskWords.detected === 'true') && (
+                <ReportCard title="Risk Detection" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>}>
+                    <div className={`inline-block px-3 py-1 rounded-full text-xs font-semibold mb-3 ${
+                        report.riskWords.severity === 'high' ? 'bg-red-500/20 text-red-400' :
+                        report.riskWords.severity === 'medium' ? 'bg-orange-500/20 text-orange-400' :
+                        'bg-yellow-500/20 text-yellow-400'
+                    }`}>
+                        Severity: {report.riskWords.severity || 'low'}
+                    </div>
+                    {report.riskWords.words && report.riskWords.words.length > 0 && (
+                        <div className="mb-3">
+                            <p className="text-sm font-semibold mb-1">Detected Words:</p>
+                            <div className="flex flex-wrap gap-2">
+                                {report.riskWords.words.map((word, i) => (
+                                    <span key={i} className="px-2 py-1 bg-red-500/10 text-red-300 rounded text-xs">{word}</span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    {report.riskWords.categories && report.riskWords.categories.length > 0 && (
+                        <div>
+                            <p className="text-sm font-semibold mb-1">Categories:</p>
+                            <ul className="list-disc pl-5 space-y-1 text-sm">
+                                {report.riskWords.categories.map((cat, i) => <li key={i}>{cat}</li>)}
+                            </ul>
+                        </div>
+                    )}
+                </ReportCard>
+            )}
+            {report.homeworkCompletion && (report.homeworkCompletion.peerA.totalCommitments > 0 || report.homeworkCompletion.peerB.totalCommitments > 0) && (
+                <ReportCard title="Homework & Commitments" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 className="font-semibold text-brand-light mb-2">Peer A Commitments</h4>
+                            <p className="text-sm text-brand-gray-400 mb-3">
+                                {report.homeworkCompletion.peerA.completed} / {report.homeworkCompletion.peerA.totalCommitments} completed
+                            </p>
+                            {report.homeworkCompletion.peerA.items && report.homeworkCompletion.peerA.items.length > 0 && (
+                                <ul className="space-y-2">
+                                    {report.homeworkCompletion.peerA.items.map((item, i) => (
+                                        <li key={i} className="flex items-start gap-2">
+                                            <span className={item.completed ? "text-green-400" : "text-gray-500"}>
+                                                {item.completed ? "✓" : "○"}
+                                            </span>
+                                            <span className="text-sm">{item.commitment}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                        <div>
+                            <h4 className="font-semibold text-brand-light mb-2">Peer B Commitments</h4>
+                            <p className="text-sm text-brand-gray-400 mb-3">
+                                {report.homeworkCompletion.peerB.completed} / {report.homeworkCompletion.peerB.totalCommitments} completed
+                            </p>
+                            {report.homeworkCompletion.peerB.items && report.homeworkCompletion.peerB.items.length > 0 && (
+                                <ul className="space-y-2">
+                                    {report.homeworkCompletion.peerB.items.map((item, i) => (
+                                        <li key={i} className="flex items-start gap-2">
+                                            <span className={item.completed ? "text-green-400" : "text-gray-500"}>
+                                                {item.completed ? "✓" : "○"}
+                                            </span>
+                                            <span className="text-sm">{item.commitment}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    </div>
+                </ReportCard>
+            )}
         </div>
         <div className="space-y-6">
             <ReportCard title="Talk-Time Balance" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a2 2 0 01-2-2V7a2 2 0 012-2h2m6-4a2 2 0 00-2-2H9a2 2 0 00-2 2v10a2 2 0 002 2h2" /></svg>}>
@@ -283,7 +417,50 @@ const ReportView: React.FC<ReportViewProps> = ({ transcript, gamificationData, o
                     <span className="flex items-center"><div className="w-3 h-3 rounded-full bg-brand-primary mr-2"></div>Peer A: {peerATalkPercentage}%</span>
                     <span className="flex items-center"><div className="w-3 h-3 rounded-full bg-brand-secondary mr-2"></div>Peer B: {peerBTalkPercentage}%</span>
                 </div>
+                {report.talkTime.peerADetails && (
+                    <div className="mt-4 pt-4 border-t border-brand-gray-700">
+                        <p className="text-xs text-brand-gray-400 mb-1"><strong>Peer A:</strong> {report.talkTime.peerADetails}</p>
+                    </div>
+                )}
+                {report.talkTime.peerBDetails && (
+                    <div className="mt-2">
+                        <p className="text-xs text-brand-gray-400 mb-1"><strong>Peer B:</strong> {report.talkTime.peerBDetails}</p>
+                    </div>
+                )}
             </ReportCard>
+            {report.engagementScore && (
+                <ReportCard title="Engagement Scores" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>}>
+                    <div className="space-y-4">
+                        <div>
+                            <div className="flex justify-between mb-1">
+                                <span className="text-sm">Peer A</span>
+                                <span className="text-sm font-semibold">{report.engagementScore.peerA}/100</span>
+                            </div>
+                            <div className="w-full bg-brand-gray-700 rounded-full h-3">
+                                <div className="bg-brand-primary h-3 rounded-full" style={{ width: `${report.engagementScore.peerA}%` }}></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div className="flex justify-between mb-1">
+                                <span className="text-sm">Peer B</span>
+                                <span className="text-sm font-semibold">{report.engagementScore.peerB}/100</span>
+                            </div>
+                            <div className="w-full bg-brand-gray-700 rounded-full h-3">
+                                <div className="bg-brand-secondary h-3 rounded-full" style={{ width: `${report.engagementScore.peerB}%` }}></div>
+                            </div>
+                        </div>
+                        <div className="pt-2 border-t border-brand-gray-700">
+                            <div className="flex justify-between mb-1">
+                                <span className="text-sm font-semibold">Overall</span>
+                                <span className="text-sm font-bold text-brand-primary">{report.engagementScore.overall}/100</span>
+                            </div>
+                            <div className="w-full bg-brand-gray-700 rounded-full h-4">
+                                <div className="bg-gradient-to-r from-brand-primary to-brand-secondary h-4 rounded-full" style={{ width: `${report.engagementScore.overall}%` }}></div>
+                            </div>
+                        </div>
+                    </div>
+                </ReportCard>
+            )}
              <ReportCard title="Mood & Engagement" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}>
                 <p>{report.moodAnalysis}</p>
              </ReportCard>

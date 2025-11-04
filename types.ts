@@ -8,6 +8,8 @@ export interface SessionReport {
     talkTime: {
         peerA: number;
         peerB: number;
+        peerADetails?: string;
+        peerBDetails?: string;
     };
     highlights: {
         peerA: string[];
@@ -16,9 +18,56 @@ export interface SessionReport {
     actionItems: Array<{
         action: string;
         owner: 'Peer A' | 'Peer B';
+        completed?: boolean;
     }>;
+    sentimentAnalysis: {
+        overall: string;
+        peerA: {
+            sentiment: 'positive' | 'neutral' | 'negative';
+            whatWentWell: string[];
+            whatWentWrong: string[];
+            emotionalState: string;
+        };
+        peerB: {
+            sentiment: 'positive' | 'neutral' | 'negative';
+            whatWentWell: string[];
+            whatWentWrong: string[];
+            emotionalState: string;
+        };
+    };
+    riskWords: {
+        detected: boolean;
+        words?: string[];
+        categories?: string[];
+        severity?: 'low' | 'medium' | 'high';
+    };
+    homeworkCompletion: {
+        peerA: {
+            totalCommitments: number;
+            completed: number;
+            items: Array<{
+                commitment: string;
+                completed: boolean;
+                notes?: string;
+            }>;
+        };
+        peerB: {
+            totalCommitments: number;
+            completed: number;
+            items: Array<{
+                commitment: string;
+                completed: boolean;
+                notes?: string;
+            }>;
+        };
+    };
     moodAnalysis: string;
     summary: string;
+    engagementScore: {
+        peerA: number;
+        peerB: number;
+        overall: number;
+    };
 }
 
 export interface UserProfile {

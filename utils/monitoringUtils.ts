@@ -5,7 +5,15 @@ export const SENTIMENT_KEYWORDS = {
 };
 
 export const RISK_WORDS = [
-    'password', 'credit card', 'ssn', 'social security', 'bank account', 'pin', 'confidential', 'secret'
+    // Financial/PII
+    'password', 'credit card', 'ssn', 'social security', 'bank account', 'pin', 'confidential', 'secret',
+    'routing number', 'account number', 'cvv', 'ssn', 'driver license',
+    // Money requests
+    'send money', 'wire transfer', 'venmo', 'paypal', 'zelle', 'cashapp', 'need money', 'loan', 'borrow money',
+    'give me money', 'send cash', 'wire funds', 'transfer funds',
+    // Inappropriate language (basic common words)
+    'damn', 'hell', 'crap', 'stupid', 'idiot', 'moron', 'hate', 'kill',
+    // More severe (add more as needed, keeping it basic for now)
 ];
 
 export const analyzeSentiment = (text: string): number => {

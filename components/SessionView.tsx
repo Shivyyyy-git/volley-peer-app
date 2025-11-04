@@ -8,14 +8,16 @@ import { detectRiskWords } from '../utils/monitoringUtils';
 import { signalingService } from '../services/signalingService';
 
 const prompts: Prompt[] = [
-    { question: "To start, what was a personal or professional win for you this past week?", speakerTurn: "Peer A" },
-    { question: "That's great to hear. Peer B, how about you? What was a win for you?", speakerTurn: "Peer B" },
-    { question: "Now, let's talk about challenges. Peer A, what's one challenge you're currently facing?", speakerTurn: "Peer A" },
-    { question: "And for you, Peer B?", speakerTurn: "Peer B" },
-    { question: "Thinking about those challenges, what's one small step you could each take to move forward? Let's start with Peer A.", speakerTurn: "Peer A" },
-    { question: "Peer B, your thoughts on a small step?", speakerTurn: "Peer B" },
-    { question: "Finally, what is the key takeaway for each of you from our session today? Peer A, you first.", speakerTurn: "Peer A" },
-    { question: "And Peer B, your key takeaway?", speakerTurn: "Peer B" },
+    { question: "Welcome! Let's start with Peer A. What was your biggest personal or professional win this past week?", speakerTurn: "Peer A" },
+    { question: "Thank you for sharing! Peer B, now it's your turn. What was your biggest win this past week?", speakerTurn: "Peer B" },
+    { question: "Great starts! Peer A, what's one significant challenge you're currently facing in your goals?", speakerTurn: "Peer A" },
+    { question: "Thank you. Peer B, what's one significant challenge you're currently facing?", speakerTurn: "Peer B" },
+    { question: "Now let's think about solutions. Peer A, what's one concrete step you can take this week to address your challenge?", speakerTurn: "Peer A" },
+    { question: "Excellent. Peer B, what's one concrete step you can take this week to address your challenge?", speakerTurn: "Peer B" },
+    { question: "We're making great progress! Peer A, what's one thing you're committing to do before our next session?", speakerTurn: "Peer A" },
+    { question: "Perfect. Peer B, what's one thing you're committing to do before our next session?", speakerTurn: "Peer B" },
+    { question: "Wonderful! Peer A, what's the most valuable insight or takeaway from today's conversation?", speakerTurn: "Peer A" },
+    { question: "Thank you. Peer B, what's the most valuable insight or takeaway from today's conversation?", speakerTurn: "Peer B" },
 ];
 
 interface SessionViewProps {
@@ -118,6 +120,7 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
 
   const [riskAlert, setRiskAlert] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<string[]>([]);
+  const [riskWordsDetected, setRiskWordsDetected] = useState<string[]>([]);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const sessionIdRef = useRef<string | null>(null);
@@ -127,6 +130,7 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
   const mediaStreamSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const isEndingRef = useRef(false);
   const transcriptRef = useRef(transcript);
+  const lastPromptIndexRef = useRef(0);
 
   useEffect(() => {
     transcriptRef.current = transcript;
@@ -154,13 +158,20 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
     // Use current transcript state (which is more up-to-date) or fall back to ref
     const finalTranscript = transcript.length > 0 ? transcript.join('\n') : transcriptRef.current.join('\n');
     console.log("Final transcript to send:", finalTranscript);
+    console.log("Risk words detected:", riskWordsDetected);
+    
+    // Append risk words info to transcript for report generation
+    let transcriptWithMetadata = finalTranscript;
+    if (riskWordsDetected.length > 0) {
+      transcriptWithMetadata += `\n\n[METADATA] Risk Words Detected: ${riskWordsDetected.join(', ')}`;
+    }
     
     if (!finalTranscript || finalTranscript.trim().length === 0) {
       console.warn("Transcript is empty! Using placeholder.");
       // Provide a basic transcript if empty
       onEndSession("Session completed. Transcript was not available, but the session was successful.");
     } else {
-      onEndSession(finalTranscript);
+      onEndSession(transcriptWithMetadata);
     }
   }, [localStream, remoteStream, onEndSession, transcript]);
 
@@ -251,10 +262,23 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
         onMessage: async (message: any) => {
             if (message.serverContent?.inputTranscription?.text) {
                 const text = message.serverContent.inputTranscription.text;
-                setTranscript(prev => [...prev, `You: ${text}`]);
+                // Determine which peer is speaking based on current prompt
+                const currentPrompt = prompts[lastPromptIndexRef.current];
+                const speakerLabel = currentPrompt?.speakerTurn || (isPeerA ? "Peer A" : "Peer B");
+                setTranscript(prev => [...prev, `${speakerLabel}: ${text}`]);
+                
+                // Track risk words
                 const detectedRisk = detectRiskWords(text);
-                if (detectedRisk && !riskAlert) {
-                    setRiskAlert(`Privacy Alert: Detected potentially sensitive term "${detectedRisk}".`);
+                if (detectedRisk) {
+                    setRiskWordsDetected(prev => {
+                        if (!prev.includes(detectedRisk)) {
+                            return [...prev, detectedRisk];
+                        }
+                        return prev;
+                    });
+                    if (!riskAlert) {
+                        setRiskAlert(`Privacy Alert: Detected potentially sensitive term "${detectedRisk}".`);
+                    }
                 }
             }
             if (message.serverContent?.outputTranscription?.text) {
@@ -419,14 +443,16 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
               // Sync prompt index with the other peer
               console.log('Peer A received next-prompt, updating index to:', data.promptIndex);
               setCurrentPromptIndex(data.promptIndex);
+              lastPromptIndexRef.current = data.promptIndex;
             }
         });
         
         // Now send the create message after handler is set up
-        await signalingService.send({ type: 'create', sessionId: newSessionId });
-        console.log('Sent create message for session:', newSessionId);
-        
-        setSessionStatus('waitingForPeer');
+                      await signalingService.send({ type: 'create', sessionId: newSessionId });
+              console.log('Sent create message for session:', newSessionId);
+              lastPromptIndexRef.current = 0;
+              
+              setSessionStatus('waitingForPeer');
 
     } catch (err) {
       console.error("Error creating session.", err);
@@ -522,6 +548,7 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
           // Sync prompt index with the other peer
           console.log('Peer B received next-prompt, updating index to:', data.promptIndex);
           setCurrentPromptIndex(data.promptIndex);
+          lastPromptIndexRef.current = data.promptIndex;
         }
       });
       
@@ -559,6 +586,7 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
     if(currentPromptIndex < prompts.length - 1) {
         const newIndex = currentPromptIndex + 1;
         setCurrentPromptIndex(newIndex);
+        lastPromptIndexRef.current = newIndex;
         // Sync prompt index with the other peer
         if (sessionIdRef.current) {
           signalingService.send({
