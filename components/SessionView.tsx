@@ -233,6 +233,8 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
   }, [riskAlert]);
 
   const handleSignalingMessage = useCallback(async (data: any) => {
+    console.log('handleSignalingMessage called with:', data.type, 'Has PC:', !!pcRef.current, 'Has Stream:', !!localStream);
+    
     if (!pcRef.current || !localStream) {
       console.warn('Cannot handle signaling message: peer connection or local stream not ready', { hasPC: !!pcRef.current, hasStream: !!localStream });
       return;
@@ -357,11 +359,24 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
         // Set up message handler BEFORE sending join
         // Peer B should only handle: offer, answer, candidate - NOT peer-joined
         signalingService.onMessage(async (data) => {
-          console.log('Peer B received signaling message:', data.type);
+          console.log('Peer B received signaling message:', data.type, 'Has PC:', !!pcRef.current, 'Has Stream:', !!localStream);
           // Peer B should NOT handle peer-joined, only offer/answer/candidate
           if (data.type === 'peer-joined') {
             console.log('Peer B ignoring peer-joined message (that\'s for Peer A)');
             return;
+          }
+          // Wait a bit if not ready yet
+          if (!pcRef.current || !localStream) {
+            console.warn('Peer B: PC or stream not ready, waiting...');
+            let retries = 0;
+            while ((!pcRef.current || !localStream) && retries < 10) {
+              await new Promise(resolve => setTimeout(resolve, 100));
+              retries++;
+            }
+            if (!pcRef.current || !localStream) {
+              console.error('Peer B: Still not ready after waiting');
+              return;
+            }
           }
           await handleSignalingMessage(data);
         });
