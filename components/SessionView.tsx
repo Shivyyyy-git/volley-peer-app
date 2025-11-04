@@ -233,8 +233,16 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
   }, [riskAlert]);
 
   const handleSignalingMessage = useCallback(async (data: any) => {
+    // Wait a bit if peer connection isn't ready yet (for join flow)
+    let retries = 0;
+    while ((!pcRef.current || !localStream) && retries < 10) {
+      console.log('Waiting for peer connection to be ready...', { hasPC: !!pcRef.current, hasStream: !!localStream, retry: retries });
+      await new Promise(resolve => setTimeout(resolve, 100));
+      retries++;
+    }
+    
     if (!pcRef.current || !localStream) {
-      console.warn('Cannot handle signaling message: peer connection or local stream not ready', { hasPC: !!pcRef.current, hasStream: !!localStream });
+      console.error('Cannot handle signaling message: peer connection or local stream not ready after retries', { hasPC: !!pcRef.current, hasStream: !!localStream });
       return;
     }
 
@@ -342,15 +350,23 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
         
         sessionIdRef.current = sessionId;
         await signalingService.connect();
+        
+        // Set up peer connection first
         setupPeerConnection(stream);
         
-        // Set up message handler before sending join
+        // Wait a bit for peer connection to be fully initialized
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        // Verify peer connection is ready
+        if (!pcRef.current) {
+          throw new Error('Peer connection failed to initialize');
+        }
+        
+        // Set up message handler AFTER peer connection is ready
         signalingService.onMessage(handleSignalingMessage);
         
-        // Wait a bit for peer connection to be ready
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        signalingService.send({ type: 'join', sessionId });
+        // Now send join message
+        await signalingService.send({ type: 'join', sessionId });
         console.log('Sent join message for session:', sessionId);
 
     } catch (err) {
