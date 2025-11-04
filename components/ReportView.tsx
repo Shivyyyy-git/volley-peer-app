@@ -52,9 +52,25 @@ const ReportView: React.FC<ReportViewProps> = ({ transcript, gamificationData, o
     try {
       const generatedReport = await generateSessionReport(transcript);
       setReport(generatedReport);
-    } catch (err) {
-      setError('Failed to generate session report. The AI may be experiencing high load. Please try again.');
-      console.error(err);
+    } catch (err: any) {
+      console.error('Report generation error:', err);
+      let errorMessage = 'Failed to generate session report. ';
+      
+      if (err?.message) {
+        if (err.message.includes('API') || err.message.includes('key')) {
+          errorMessage += 'API key error. Please check your environment variables.';
+        } else if (err.message.includes('quota') || err.message.includes('limit')) {
+          errorMessage += 'API quota exceeded. Please try again later.';
+        } else if (err.message.includes('403') || err.message.includes('PERMISSION_DENIED')) {
+          errorMessage += 'API key invalid or revoked. Please check your API key settings.';
+        } else {
+          errorMessage += err.message;
+        }
+      } else {
+        errorMessage += 'The AI may be experiencing high load. Please try again.';
+      }
+      
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -198,12 +214,20 @@ const ReportView: React.FC<ReportViewProps> = ({ transcript, gamificationData, o
         <div className="min-h-screen flex flex-col justify-center items-center bg-brand-dark p-4 text-center">
             <h2 className="text-2xl font-bold text-red-500 mb-4">An Error Occurred</h2>
             <p className="text-brand-gray-300 mb-8">{error}</p>
-            <button
-                onClick={onStartNewSession}
-                className="bg-brand-primary text-white font-semibold px-6 py-3 rounded-full hover:bg-indigo-500 transition-colors"
-            >
-                Start a New Session
-            </button>
+            <div className="flex gap-4">
+                <button
+                    onClick={fetchReport}
+                    className="bg-brand-secondary text-white font-semibold px-6 py-3 rounded-full hover:bg-green-500 transition-colors"
+                >
+                    Retry Report Generation
+                </button>
+                <button
+                    onClick={onStartNewSession}
+                    className="bg-brand-primary text-white font-semibold px-6 py-3 rounded-full hover:bg-indigo-500 transition-colors"
+                >
+                    Start a New Session
+                </button>
+            </div>
         </div>
     );
   }

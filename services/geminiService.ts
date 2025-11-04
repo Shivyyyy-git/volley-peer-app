@@ -19,9 +19,13 @@ const getAI = async () => {
     if (!ai) {
         const module = await getGenAIModule();
         const { GoogleGenAI } = module;
-        const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
+        // In browser/client-side, use import.meta.env (Vite environment variables)
+        // Check for Vite env var first (browser), then fallback to process.env (server-side/Node)
+        const apiKey = import.meta.env.VITE_GEMINI_API_KEY || 
+            (typeof window === 'undefined' && typeof globalThis !== 'undefined' && (globalThis as any).process?.env?.GEMINI_API_KEY) ||
+            (typeof window === 'undefined' && typeof globalThis !== 'undefined' && (globalThis as any).process?.env?.API_KEY);
         if (!apiKey) {
-            throw new Error("API_KEY or GEMINI_API_KEY environment variable not set");
+            throw new Error("VITE_GEMINI_API_KEY environment variable not set. Please set it in your Render environment variables.");
         }
         ai = new GoogleGenAI({ apiKey });
     }
@@ -270,8 +274,9 @@ export const generateSessionReport = async (transcript: string): Promise<Session
         }
         
         return parsed as SessionReport;
-    } catch (e) {
-        console.error("Failed to parse Gemini report response:", e, "Original text:", response.text);
-        throw new Error("Could not generate session report due to invalid format.");
+    } catch (e: any) {
+        console.error("Failed to parse Gemini report response:", e);
+        console.error("Response text:", response.text);
+        throw new Error(`Could not generate session report: ${e.message || 'Invalid response format'}`);
     }
 };
