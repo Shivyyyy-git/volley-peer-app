@@ -1,5 +1,9 @@
 
-import { Blob } from "@google/genai";
+// Custom Blob type for audio data
+export interface AudioBlob {
+  data: string;
+  mimeType: string;
+}
 
 export function encode(bytes: Uint8Array): string {
   let binary = '';
@@ -40,7 +44,7 @@ export async function decodeAudioData(
 }
 
 
-export function createBlob(data: Float32Array): Blob {
+export function createBlob(data: Float32Array): AudioBlob {
     const l = data.length;
     const int16 = new Int16Array(l);
     for (let i = 0; i < l; i++) {
