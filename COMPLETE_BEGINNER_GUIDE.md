@@ -183,7 +183,7 @@ git push -u origin main
 
    **Variable 1:**
    - **Key**: `GEMINI_API_KEY`
-   - **Value**: `AIzaSyC6sc7kAyAeL21OiHQNYHtZLMtxMo80btY` (your API key)
+   - **Value**: `YOUR_GEMINI_API_KEY_HERE` (get this from https://aistudio.google.com/apikey)
    - Click **"Add"**
 
    **Variable 2:**
