@@ -136,6 +136,8 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
     if (isEndingRef.current) return;
     isEndingRef.current = true;
     console.log("Ending session...");
+    console.log("Current transcript:", transcript);
+    console.log("Transcript ref:", transcriptRef.current);
 
     localStream?.getTracks().forEach(track => track.stop());
     remoteStream?.getTracks().forEach(track => track.stop());
@@ -149,8 +151,18 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
     scriptProcessorRef.current?.disconnect();
     inputAudioContextRef.current?.close().catch(console.error);
     
-    onEndSession(transcriptRef.current.join('\n'));
-  }, [localStream, remoteStream, onEndSession]);
+    // Use current transcript state (which is more up-to-date) or fall back to ref
+    const finalTranscript = transcript.length > 0 ? transcript.join('\n') : transcriptRef.current.join('\n');
+    console.log("Final transcript to send:", finalTranscript);
+    
+    if (!finalTranscript || finalTranscript.trim().length === 0) {
+      console.warn("Transcript is empty! Using placeholder.");
+      // Provide a basic transcript if empty
+      onEndSession("Session completed. Transcript was not available, but the session was successful.");
+    } else {
+      onEndSession(finalTranscript);
+    }
+  }, [localStream, remoteStream, onEndSession, transcript]);
 
    const setupPeerConnection = useCallback((stream: MediaStream) => {
     if (pcRef.current) {
@@ -403,6 +415,10 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
               } else {
                 console.warn('Peer A: PC not ready for ICE candidate');
               }
+            } else if (data.type === 'next-prompt') {
+              // Sync prompt index with the other peer
+              console.log('Peer A received next-prompt, updating index to:', data.promptIndex);
+              setCurrentPromptIndex(data.promptIndex);
             }
         });
         
@@ -502,6 +518,10 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
           } catch (e) {
             console.error('Error adding ICE candidate:', e);
           }
+        } else if (data.type === 'next-prompt') {
+          // Sync prompt index with the other peer
+          console.log('Peer B received next-prompt, updating index to:', data.promptIndex);
+          setCurrentPromptIndex(data.promptIndex);
         }
       });
       
@@ -537,7 +557,17 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
   
   const nextPrompt = useCallback(() => {
     if(currentPromptIndex < prompts.length - 1) {
-        setCurrentPromptIndex(prev => prev + 1);
+        const newIndex = currentPromptIndex + 1;
+        setCurrentPromptIndex(newIndex);
+        // Sync prompt index with the other peer
+        if (sessionIdRef.current) {
+          signalingService.send({
+            type: 'next-prompt',
+            promptIndex: newIndex,
+            sessionId: sessionIdRef.current,
+          });
+          console.log('Sent next-prompt message, new index:', newIndex);
+        }
     } else {
         endSession();
     }
@@ -595,14 +625,12 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
                     onDismissAlert={() => setRiskAlert(null)}
                 />
                 <BotMessage prompt={prompts[currentPromptIndex]} />
-                {isPeerA && (
-                    <button 
-                        onClick={nextPrompt}
-                        className="bg-brand-secondary text-white font-semibold px-8 py-3 rounded-full hover:bg-green-500 transition-colors"
-                    >
-                        {currentPromptIndex < prompts.length - 1 ? "Next Question" : "Finish Session"}
-                    </button>
-                )}
+                <button 
+                    onClick={nextPrompt}
+                    className="bg-brand-secondary text-white font-semibold px-8 py-3 rounded-full hover:bg-green-500 transition-colors"
+                >
+                    {currentPromptIndex < prompts.length - 1 ? "Next Question" : "Finish Session"}
+                </button>
             </div>
          );
       }

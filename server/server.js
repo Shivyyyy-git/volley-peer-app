@@ -59,7 +59,8 @@ wss.on('connection', (ws) => {
         case 'offer':
         case 'answer':
         case 'candidate':
-          // Relay WebRTC signaling data to other clients in the session
+        case 'next-prompt':
+          // Relay WebRTC signaling data and prompt sync to other clients in the session
           if (sessions.has(sessionId)) {
             const session = sessions.get(sessionId);
             session.forEach((client) => {
