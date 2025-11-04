@@ -161,6 +161,14 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
     pcRef.current = new RTCPeerConnection(STUN_SERVERS);
     console.log('Created new RTCPeerConnection');
 
+    // Add local tracks for sending - this automatically creates transceivers
+    console.log('Adding local tracks to peer connection. Stream has', stream.getTracks().length, 'tracks');
+    stream.getTracks().forEach(track => {
+        console.log('Adding track:', track.kind, track.id, 'enabled:', track.enabled, 'readyState:', track.readyState);
+        pcRef.current?.addTrack(track, stream);
+    });
+    console.log('All local tracks added. Total transceivers:', pcRef.current.getTransceivers().length);
+
     pcRef.current.onicecandidate = (event) => {
       if (event.candidate) {
         console.log('Sending ICE candidate');
@@ -174,13 +182,33 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
       }
     };
 
+    // Track remote streams to aggregate all tracks
+    const remoteStreamsMap = new Map<string, MediaStream>();
+    
     pcRef.current.ontrack = (event) => {
-        console.log('✅ Received remote track! Streams:', event.streams.length);
-        if (event.streams && event.streams[0]) {
-          console.log('Setting remote stream with', event.streams[0].getTracks().length, 'tracks');
-          setRemoteStream(event.streams[0]);
-          // Don't set status here - let it be set when answer is received or connection state changes
+        console.log('✅ Received remote track! Kind:', event.track.kind, 'Track ID:', event.track.id, 'Streams:', event.streams.length);
+        
+        let targetStream: MediaStream;
+        
+        if (event.streams && event.streams.length > 0 && event.streams[0]) {
+          // Use the stream from the event
+          targetStream = event.streams[0];
+          console.log('Using stream from event with', targetStream.getTracks().length, 'tracks');
+        } else {
+          // Create or get existing stream for this track
+          const streamId = 'remote-stream-1';
+          if (!remoteStreamsMap.has(streamId)) {
+            remoteStreamsMap.set(streamId, new MediaStream());
+            console.log('Created new remote stream');
+          }
+          targetStream = remoteStreamsMap.get(streamId)!;
+          targetStream.addTrack(event.track);
+          console.log('Added track to remote stream. Stream now has', targetStream.getTracks().length, 'tracks');
         }
+        
+        // Update React state with the stream
+        setRemoteStream(targetStream);
+        console.log('✅ Remote stream updated with', targetStream.getTracks().length, 'tracks:', targetStream.getTracks().map(t => t.kind));
     };
     
     pcRef.current.onconnectionstatechange = () => {
@@ -195,13 +223,6 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
         setSessionStatus('error');
       }
     };
-
-    console.log('Adding local tracks to peer connection. Stream has', stream.getTracks().length, 'tracks');
-    stream.getTracks().forEach(track => {
-        console.log('Adding track:', track.kind, track.id);
-        pcRef.current?.addTrack(track, stream);
-    });
-    console.log('All local tracks added to peer connection');
   }, []);
 
   const startAILiveSession = useCallback(async (stream: MediaStream) => {
@@ -324,8 +345,13 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
                 await new Promise(resolve => setTimeout(resolve, 200));
                 if (pcRef.current) {
                     try {
-                      const offer = await pcRef.current.createOffer();
+                      console.log('Creating offer with', pcRef.current.getSenders().length, 'senders');
+                      const offer = await pcRef.current.createOffer({
+                        offerToReceiveAudio: true,
+                        offerToReceiveVideo: true
+                      });
                       await pcRef.current.setLocalDescription(offer);
+                      console.log('Offer SDP:', offer.sdp?.substring(0, 200));
                       signalingService.send({ type: 'offer', offer, sessionId: sessionIdRef.current });
                       console.log('✅ Peer A sent offer to peer');
                     } catch (e) {
@@ -440,13 +466,18 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
           }
         }
         
-        // Handle offer directly (don't rely on handleSignalingMessage closure)
+                 // Handle offer directly (don't rely on handleSignalingMessage closure)
         if (data.type === 'offer') {
           try {
             console.log('Peer B handling offer...');
             await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.offer));
-            const answer = await pcRef.current.createAnswer();
+            console.log('Peer B set remote description. Creating answer with', pcRef.current.getSenders().length, 'senders');
+            const answer = await pcRef.current.createAnswer({
+              offerToReceiveAudio: true,
+              offerToReceiveVideo: true
+            });
             await pcRef.current.setLocalDescription(answer);
+            console.log('Answer SDP:', answer.sdp?.substring(0, 200));
             signalingService.send({ type: 'answer', answer, sessionId: sessionIdRef.current });
             console.log('✅ Peer B sent answer, setting status to connected');
             setSessionStatus('connected');
