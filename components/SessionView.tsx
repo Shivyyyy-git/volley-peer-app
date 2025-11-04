@@ -153,38 +153,55 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
   }, [localStream, remoteStream, onEndSession]);
 
    const setupPeerConnection = useCallback((stream: MediaStream) => {
+    if (pcRef.current) {
+      console.log('Closing existing peer connection before creating new one');
+      pcRef.current.close();
+    }
+    
     pcRef.current = new RTCPeerConnection(STUN_SERVERS);
+    console.log('Created new RTCPeerConnection');
 
     pcRef.current.onicecandidate = (event) => {
       if (event.candidate) {
+        console.log('Sending ICE candidate');
         signalingService.send({
           type: 'candidate',
           candidate: event.candidate,
           sessionId: sessionIdRef.current,
         });
+      } else {
+        console.log('ICE gathering complete');
       }
     };
 
     pcRef.current.ontrack = (event) => {
-        console.log('Received remote track, setting remote stream');
-        setRemoteStream(event.streams[0]);
-        setSessionStatus('connected');
+        console.log('✅ Received remote track! Streams:', event.streams.length);
+        if (event.streams && event.streams[0]) {
+          console.log('Setting remote stream with', event.streams[0].getTracks().length, 'tracks');
+          setRemoteStream(event.streams[0]);
+          // Don't set status here - let it be set when answer is received or connection state changes
+        }
     };
     
     pcRef.current.onconnectionstatechange = () => {
       const state = pcRef.current?.connectionState;
-      console.log('Peer connection state:', state);
+      console.log('Peer connection state changed:', state);
       if (state === 'connected') {
+        console.log('✅ Peer connection is connected!');
         setSessionStatus('connected');
       } else if (state === 'failed' || state === 'disconnected') {
+        console.error('❌ Peer connection failed/disconnected:', state);
         setError('Connection failed. Please try again.');
         setSessionStatus('error');
       }
     };
 
+    console.log('Adding local tracks to peer connection. Stream has', stream.getTracks().length, 'tracks');
     stream.getTracks().forEach(track => {
+        console.log('Adding track:', track.kind, track.id);
         pcRef.current?.addTrack(track, stream);
     });
+    console.log('All local tracks added to peer connection');
   }, []);
 
   const startAILiveSession = useCallback(async (stream: MediaStream) => {
@@ -298,26 +315,68 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
         
         // Set up message handler BEFORE sending create message
         signalingService.onMessage(async (data) => {
-            console.log('Received signaling message:', data.type);
+            console.log('Peer A received signaling message:', data.type);
+            
             if (data.type === 'peer-joined' && data.sessionId === sessionIdRef.current) {
                 console.log("Peer joined, creating offer...");
                 setupPeerConnection(stream);
                 // Wait a bit for peer connection to be ready
-                await new Promise(resolve => setTimeout(resolve, 100));
+                await new Promise(resolve => setTimeout(resolve, 200));
                 if (pcRef.current) {
                     try {
                       const offer = await pcRef.current.createOffer();
                       await pcRef.current.setLocalDescription(offer);
                       signalingService.send({ type: 'offer', offer, sessionId: sessionIdRef.current });
-                      console.log('Sent offer to peer');
+                      console.log('✅ Peer A sent offer to peer');
                     } catch (e) {
                       console.error('Error creating offer:', e);
                       setError('Failed to create connection offer');
+                      setSessionStatus('error');
                     }
+                } else {
+                  console.error('Peer connection not ready after setup');
+                  setError('Failed to create peer connection');
+                  setSessionStatus('error');
                 }
                 startAILiveSession(stream);
-            } else {
-                handleSignalingMessage(data);
+            } else if (data.type === 'answer') {
+              // Handle answer directly (don't rely on handleSignalingMessage closure)
+              if (!pcRef.current) {
+                console.warn('Peer A: PC not ready for answer, waiting...');
+                let retries = 0;
+                while (!pcRef.current && retries < 20) {
+                  await new Promise(resolve => setTimeout(resolve, 100));
+                  retries++;
+                }
+              }
+              if (pcRef.current) {
+                try {
+                  console.log('Peer A handling answer...');
+                  await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+                  console.log('✅ Peer A received answer, setting status to connected');
+                  setSessionStatus('connected');
+                } catch (e) {
+                  console.error('Error handling answer:', e);
+                  setError('Failed to establish connection');
+                  setSessionStatus('error');
+                }
+              } else {
+                console.error('Peer A: PC still not ready after waiting');
+                setError('Peer connection not ready');
+                setSessionStatus('error');
+              }
+            } else if (data.type === 'candidate' && data.candidate) {
+              // Handle ICE candidate directly
+              if (pcRef.current) {
+                try {
+                  await pcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+                  console.log('Peer A added ICE candidate');
+                } catch (e) {
+                  console.error('Error adding ICE candidate:', e);
+                }
+              } else {
+                console.warn('Peer A: PC not ready for ICE candidate');
+              }
             }
         });
         
@@ -332,7 +391,7 @@ const SessionView: React.FC<SessionViewProps> = ({ onEndSession }) => {
       setError("Could not access camera/microphone. Please check permissions.");
       setSessionStatus('error');
     }
-  }, [setupPeerConnection, handleSignalingMessage, startAILiveSession]);
+  }, [setupPeerConnection, startAILiveSession]);
 
   const joinSession = useCallback(async (sessionId: string) => {
     setSessionStatus('joining');
